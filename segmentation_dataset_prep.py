@@ -75,7 +75,7 @@ def generate_object_segmentation_dataset( object_dataset_path, target_object_nam
     
     # Get files
     target_hdf5_file = os.path.join(object_dataset_path, target_object_name)
-    alien_hdf5_files = sorted(glob.glob(os.path.join(object_dataset_path, "*")))
+    alien_hdf5_files = sorted(glob.glob(os.path.join(object_dataset_path, "*.h5")))
     alien_hdf5_files.remove(target_hdf5_file)
     
     # Target object samples collection (each object file has 1200 samples)
