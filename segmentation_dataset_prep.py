@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import h5py
 import random
@@ -7,48 +8,6 @@ import math
 import getpass
 
 print ("numpy version: ",np.__version__)
-
-
-# List of objects
-#dishwash_fairy_lemon_320ml_1200_2048
-#dishwash_fairy_original_383ml_1200_2048
-
-#hot_chocinstant_cadbury_400gm_1200_2048
-#
-#hot_choc_cadbury_250gm_1200_2048
-
-#coffee_kenco_100gm_1200_2048
-
-#jam_hartleys_apricot_300gm_1200_2048
-#jam_hartleys_strawberry_300gm_1200_2048
-#jam_hartleys_pineapple_300gm_1200_2048
-
-#
-#honey_rowse_340gm_1200_2048
-
-
-#ketchup_heinz_400ml_1200_2048
-
-#biscuit_spread_lotus_400gm_1200_2048
-#hazelnut_cocoa_spread_nutella_350gm_1200_2048
-#hazelnut_cocoa_spread_nutella_200gm_1200_2048
-#crunchy_peanut_butter_sunpat_400gm_1200_2048
-#crunchy_peanut_butter_sunpat_400gm_1200_2048
-
-#shampoo_head_and_shoulders_classic_400ml_1200_2048
-#shampoo_head_and_shoulders_classic_225ml_1200_2048
-#shampoo_head_and_shoulders_citrus_250ml_1200_2048  
-#shampoo_head_and_shoulders_citrus_400ml_1200_2048
-
-#pasta_napolina_penne_no_50_500gm_1200_2048
-
-#cereal_kelloggs_crunchy_nut_honey_and_nut_300gm_1200_2048
-
-#TARGET_OBJECT_NAME = "shampoo_head_and_shoulders_citrus_400ml_1200_2048"
-TARGET_OBJECT_NAME = "coffee_nescafe_3in1_original_6cups_1200_2048"
-OBJECT_DATASET_PATH = "/home"+getpass.getuser()+"/MiniMarket_dataset_processing/MiniMarket77/"
-OBJECT_MODEL_PATH = "/home"+getpass.getuser()+"/MiniMarket_dataset_processing/object_models/"
-GENERATED_DATASET_PATH = "/home"+getpass.getuser()+"/MiniMarket_dataset_processing/object_segmentation_dataset/"
 
 orientation_samples = 10
 
@@ -104,9 +63,9 @@ def random_homogeneous_3d_translation(x_min, x_max, y_min, y_max, z_min, z_max):
 
 
 
-NUM_POINTS_PER_SEG_SAMPLE = 20480
-#NUM_POINTS_PER_SEG_SAMPLE = 40960
-Max_number_of_objects_per_seg_sample = 10  #each object has 2048 colored points
+# NUM_POINTS_PER_SEG_SAMPLE = 20480
+NUM_POINTS_PER_SEG_SAMPLE = 40960
+Max_number_of_objects_per_seg_sample = 10  #each object has 2048 or 4096 colored points
 
 def generate_object_segmentation_dataset( object_dataset_path, target_object_name, generated_dataset_path, Max_number_of_objects_per_seg_sample ):
 
@@ -115,15 +74,18 @@ def generate_object_segmentation_dataset( object_dataset_path, target_object_nam
     all_seg_sample_labels=[]
     
     # Get files
-    target_hdf5_file = object_dataset_path + target_object_name
-    alien_hdf5_files = sorted(glob.glob(object_dataset_path+"*"))
+    target_hdf5_file = os.path.join(object_dataset_path, target_object_name)
+    alien_hdf5_files = sorted(glob.glob(os.path.join(object_dataset_path, "*")))
     alien_hdf5_files.remove(target_hdf5_file)
     
     # Target object samples collection (each object file has 1200 samples)
     # Assuming each sample has 2048 points, the shape of all samples is (1200,2048,6)
-    with h5py.File(target_hdf5_file, "r") as f:
+    my_product_dataset_hdf5_file = os.path.join(object_dataset_path, target_object_name)
+    with h5py.File(my_product_dataset_hdf5_file, "r") as f:
         target_points = f["point_clouds"][()]  # returns as a numpy array
         target_colors = f["color_clouds"][()]  # returns as a numpy array
+    print(target_points.shape)
+    print(target_colors.shape)
     object_data_size = target_points.shape[1] # assuming all objects will have the same sample size
 
     # For each sample in the target object (each object has 1200 samples), we take such sample and randomly rotate it 4 times to enrich the data
@@ -131,7 +93,8 @@ def generate_object_segmentation_dataset( object_dataset_path, target_object_nam
     # Each point is 8D -> 3D position + 3D color + 2D one-hot-shot label
     # Dataset dimension as such should be 4800 x 20480 x 8
     for it in range(orientation_samples):
-        for target_sample_index in range(target_points.shape[0]):
+        num_individual_samples = target_points.shape[0]//10
+        for target_sample_index in range(int(num_individual_samples)):
         #for target_sample_index in range(5):
             # Select one sample
             selected_target_sample_point = target_points[target_sample_index,:,:]
@@ -177,6 +140,7 @@ def generate_object_segmentation_dataset( object_dataset_path, target_object_nam
                     
             
             # Alien objects data collection
+            print("copy_alien_files: ", copy_alien_files)
             for i, alien_object_file in enumerate(copy_alien_files):
                 with h5py.File(copy_alien_files[i], "r") as f:
                     alien_points = f["point_clouds"][()]
@@ -204,7 +168,9 @@ def generate_object_segmentation_dataset( object_dataset_path, target_object_nam
                     #seg_sample_label = np.concatenate( (seg_sample_label, np.zeros(object_data_size)), axis=0 )
                     seg_sample_label = np.concatenate( (seg_sample_label, np.concatenate( (np.zeros((object_data_size,1)), np.ones((object_data_size,1))),axis=1)), axis=0 )  # one-hot encoding
 
-
+            print("NUM_POINTS_PER_SEG_SAMPLE: ", NUM_POINTS_PER_SEG_SAMPLE)
+            print("seg_sample_point.shape: ", seg_sample_point.shape)
+            print("seg_sample_color.shape: ", seg_sample_color.shape)
             # Pad the remaining sample size with zeros since we have varying number of objects per segmentation sample generated
             seg_sample_point = np.concatenate( (seg_sample_point, np.zeros((NUM_POINTS_PER_SEG_SAMPLE - seg_sample_point.shape[0], 3)) ), axis=0 )
             seg_sample_color = np.concatenate( (seg_sample_color, np.zeros((NUM_POINTS_PER_SEG_SAMPLE - seg_sample_color.shape[0], 3)) ), axis=0 )
@@ -241,7 +207,10 @@ def generate_object_segmentation_dataset( object_dataset_path, target_object_nam
     print(np.asarray(all_seg_sample_labels).shape)
 
     # Save the segmentation samples to a new file
-    hdf5_filename = generated_dataset_path + target_object_name + "_segmentation_" + str(NUM_POINTS_PER_SEG_SAMPLE) + "_" + str(orientation_samples*1200)
+    if not os.path.exists(generated_dataset_path):
+        os.makedirs(generated_dataset_path)
+    hdf5_filename = generated_dataset_path + target_object_name[:-3] + "_segmentation_" + str(NUM_POINTS_PER_SEG_SAMPLE) + "_" + str(orientation_samples*num_individual_samples) + ".h5"
+    print("hdf5_filename: ", hdf5_filename)
     with h5py.File(hdf5_filename, 'w') as f:
         # Create a point clouds dataset in the file
         f.create_dataset("seg_points", data = np.asarray(all_seg_sample_points))
@@ -255,5 +224,4 @@ def generate_object_segmentation_dataset( object_dataset_path, target_object_nam
 
 
 
-generate_object_segmentation_dataset(OBJECT_DATASET_PATH, TARGET_OBJECT_NAME, GENERATED_DATASET_PATH, Max_number_of_objects_per_seg_sample)
 
